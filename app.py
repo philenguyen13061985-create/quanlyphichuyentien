@@ -201,11 +201,10 @@ with tab2:
             except Exception as e:
                 st.error(f"Có lỗi khi xử lý dữ liệu: {e}")
 
-# --- TAB 3: CẬP NHẬT ĐƠN VỊ NỘP TIỀN (HOÀN CHỈNH - KHÔNG BỊ CẮT CODE) ---
+# --- TAB 3: CẬP NHẬT ĐƠN VỊ NỘP TIỀN ---
 with tab3:
     st.subheader("Ghi nhận đơn vị nộp tiền vào tài khoản")
     conn = get_connection()
-    # Truy vấn lấy danh sách kèm số dư nợ hiện tại để hiển thị trực quan
     query_select = """
         SELECT d.id, d.name, (d.total_debt - COALESCE(SUM(p.amount_paid), 0)) AS remaining_debt
         FROM debtors d LEFT JOIN payments p ON d.id = p.debtor_id GROUP BY d.id
@@ -214,4 +213,4 @@ with tab3:
     conn.close()
 
     if not df_select.empty:
-        # Tạo danh mục chọn đơn vị
+        debtor_options = {row["name"]: (row["id"], row["remaining_debt"]) for _, row in df_select.iterrows()}
