@@ -60,9 +60,9 @@ def parse_kho_bac_excel(file):
                     current_name = None
     return extracted_debtors
 
-# --- GIAO DIỆN APP (STREAMLIT VÀ TIẾNG VIỆT KBNN) ---
-st.set_page_config(page_title="App Theo Dõi Phí Chuyển Tiền KBNN", layout="wide")
-st.title("🏦 App Theo Dõi Trả Phí Chuyển Tiền KBNN")
+# --- GIAO DIỆN APP (MỚI: CẬP NHẬT TÊN KHU VỰC XIV - PGD SỐ 18) ---
+st.set_page_config(page_title="KBNN Khu Vực XIV - PGD số 18", layout="wide")
+st.title("🏦 App Theo Dõi Trả Phí Chuyển Tiền KBNN khu vực XIV - PGD số 18")
 
 tab1, tab2, tab3 = st.tabs(["📊 Tổng quan & Báo cáo", "➕ Nạp bảng kê phí KBNN (Excel)", "💵 Cập nhật đơn vị nộp phí"])
 
@@ -113,8 +113,32 @@ with tab1:
         st.info("Hiện tại chưa có dữ liệu. Vui lòng qua tab 'Nạp bảng kê phí KBNN (Excel)'.")
     conn.close()
 
-# --- TAB 2: NẠP FILE EXCEL BẢNG KÊ ---
+# --- TAB 2: NẠP FILE EXCEL BẢNG KÊ & XÓA DỮ LIỆU ---
 with tab2:
+    # --- KHU VỰC CÔNG CỤ QUẢN TRỊ (XÓA DỮ LIỆU) ---
+    st.subheader("🛠️ Công cụ Quản trị Dữ liệu")
+    with st.expander("⚠️ Bấm vào đây để mở chức năng XÓA dữ liệu hệ thống", expanded=False):
+        st.warning("Hành động này sẽ xóa vĩnh viễn toàn bộ danh sách đơn vị, số tiền phí phát sinh và cả lịch sử nộp tiền đang có trên hệ thống để làm sạch bộ nhớ.")
+        confirm_code = st.text_input("Gõ chữ 'XUATPHATLAI' vào ô dưới đây để xác nhận xóa:", value="")
+        
+        if st.button("🔴 XÁC NHẬN XÓA TOÀN BỘ DỮ LIỆU", type="primary"):
+            if confirm_code == "XUATPHATLAI":
+                try:
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM payments")
+                    cursor.execute("DELETE FROM debtors")
+                    conn.commit()
+                    conn.close()
+                    st.success("🔥 Toàn bộ dữ liệu cũ đã được xóa sạch hoàn toàn! Bạn có thể tải file Excel mới lên ngay bây giờ.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Có lỗi xảy ra: {e}")
+            else:
+                st.error("Mã xác nhận chưa chính xác. Vui lòng gõ đúng chữ 'XUATPHATLAI' viết hoa không dấu.")
+
+    st.markdown("---")
+    
     col_manual, col_excel = st.columns(2)
     
     with col_manual:
@@ -190,19 +214,3 @@ with tab3:
             selected_debtor_name = st.selectbox("Chọn đơn vị nộp phí:", options=list(debtor_options.keys()))
             amount_to_pay = st.number_input("Số tiền đơn vị đã chuyển khoản nộp (VND):", min_value=0.0, step=1000.0, format="%f")
             pay_date = st.date_input("Ngày nhận được tiền chuyển khoản:")
-            ref_text = st.text_input("Ghi chú / Mã giao dịch ngân hàng:")
-            submit_payment = st.form_submit_button("Xác nhận cập nhật tiền vào tài khoản")
-
-            if submit_payment:
-                if amount_to_pay <= 0:
-                    st.error("Số tiền nộp phải lớn hơn 0 VND!")
-                else:
-                    debtor_id = debtor_options[selected_debtor_name]
-                    conn = get_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("INSERT INTO payments (debtor_id, amount_paid, payment_date, reference) VALUES (?, ?, ?, ?)",
-                                   (debtor_id, amount_to_pay, str(pay_date), ref_text.strip()))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"✅ Đã ghi nhận: +{amount_to_pay:,.0f} VND từ đơn vị {selected_debtor_name}")
-                    st.rerun()
