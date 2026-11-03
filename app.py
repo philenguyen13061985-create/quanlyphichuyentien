@@ -4,9 +4,9 @@ import plotly.express as px
 import streamlit as st
 
 # =================================================================
-# CAO CẤP: THIẾT LẬP MẬT KHẨU QUẢN TRỊ
+# THIẾT LẬP MẬT KHẨU QUẢN TRỊ CAO CẤP
 # =================================================================
-PASSWORD_ADMIN = "PGD18@2026"  # Bạn có thể sửa chữ trong ngoặc kép này để đổi mật khẩu
+PASSWORD_ADMIN = "PGD18@2026"  # Bạn có thể sửa mật khẩu ở đây
 
 # --- CẤU HÌNH DATABASE ---
 DB_NAME = "debt_tracker.db"
@@ -39,7 +39,7 @@ init_db()
 def get_connection():
     return sqlite3.connect(DB_NAME)
 
-# --- HÀM BÓC TÁCH ĐẶC THÙ CHO BẢNG KÊ KHO BẠC ---
+# --- HÀM BÓC TÁCH TỰ ĐỘNG FILE EXCEL KHO BẠC ---
 def parse_kho_bac_excel(file):
     df = pd.read_excel(file, header=None)
     extracted_debtors = []
@@ -65,7 +65,7 @@ def parse_kho_bac_excel(file):
                     current_name = None
     return extracted_debtors
 
-# --- GIAO DIỆN APP ---
+# --- CẤU HÌNH GIAO DIỆN WEB APP ---
 st.set_page_config(page_title="KBNN Khu Vực XIV - PGD số 18", layout="wide")
 st.title("🏦 App Theo Dõi Trả Phí Chuyển Tiền KBNN khu vực XIV - PGD số 18")
 
@@ -117,7 +117,7 @@ with tab1:
         st.info("Hiện tại chưa có dữ liệu. Vui lòng qua tab 'Nạp bảng kê phí KBNN (Excel)'.")
     conn.close()
 
-# --- TAB 2: NẠP FILE EXCEL BẢNG KÊ & XÓA BẢO MẬT ---
+# --- TAB 2: NẠP FILE EXCEL BẢNG KÊ & CÔNG CỤ XÓA BẢO MẬT ---
 with tab2:
     st.subheader("🛠️ Khu vực cấu hình nội bộ")
     with st.expander("🔑 BẤM ĐỂ MỞ TÍNH NĂNG XÓA TOÀN BỘ DỮ LIỆU (CẦN MẬT KHẨU)", expanded=False):
@@ -201,14 +201,17 @@ with tab2:
             except Exception as e:
                 st.error(f"Có lỗi khi xử lý dữ liệu: {e}")
 
-# --- TAB 3: CẬP NHẬT ĐƠN VỊ NỘP TIỀN (HOÀN CHỈNH) ---
+# --- TAB 3: CẬP NHẬT ĐƠN VỊ NỘP TIỀN (HOÀN CHỈNH - KHÔNG BỊ CẮT CODE) ---
 with tab3:
     st.subheader("Ghi nhận đơn vị nộp tiền vào tài khoản")
     conn = get_connection()
-    df_select = pd.read_sql_query("SELECT id, name FROM debtors", conn)
+    # Truy vấn lấy danh sách kèm số dư nợ hiện tại để hiển thị trực quan
+    query_select = """
+        SELECT d.id, d.name, (d.total_debt - COALESCE(SUM(p.amount_paid), 0)) AS remaining_debt
+        FROM debtors d LEFT JOIN payments p ON d.id = p.debtor_id GROUP BY d.id
+    """
+    df_select = pd.read_sql_query(query_select, conn)
     conn.close()
 
     if not df_select.empty:
-        debtor_options = {row["name"]: row["id"] for _, row in df_select.iterrows()}
-        with st.form("add_payment_form", clear_on_submit=True):
-            selected_debtor_name = st.selectbox("Chọn đơn vị nộp phí:", options=list(debtor_options.keys()))
+        # Tạo danh mục chọn đơn vị
