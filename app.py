@@ -4,9 +4,9 @@ import plotly.express as px
 import streamlit as st
 
 # =================================================================
-# CAO CẤP: THIẾT LẬP MẬT KHẨU QUẢN TRỊ (BẠN CÓ THỂ ĐỔI MẬT KHẨU Ở ĐÂY)
+# CAO CẤP: THIẾT LẬP MẬT KHẨU QUẢN TRỊ
 # =================================================================
-PASSWORD_ADMIN = "PGD18@2026"  # Thay đổi chuỗi này để đổi mật khẩu theo ý bạn
+PASSWORD_ADMIN = "PGD18@2026"  # Bạn có thể sửa chữ trong ngoặc kép này để đổi mật khẩu
 
 # --- CẤU HÌNH DATABASE ---
 DB_NAME = "debt_tracker.db"
@@ -65,7 +65,7 @@ def parse_kho_bac_excel(file):
                     current_name = None
     return extracted_debtors
 
-# --- GIAO DIỆN APP (KBNN KHU VỰC XIV - PGD SỐ 18) ---
+# --- GIAO DIỆN APP ---
 st.set_page_config(page_title="KBNN Khu Vực XIV - PGD số 18", layout="wide")
 st.title("🏦 App Theo Dõi Trả Phí Chuyển Tiền KBNN khu vực XIV - PGD số 18")
 
@@ -101,7 +101,6 @@ with tab1:
         fig = px.bar(df_melted, x="Tên đơn vị", y="Số tiền", color="Trạng thái", barmode="stack", color_discrete_map={"Đã nộp (VND)": "#2ecc71", "Còn thiếu (VND)": "#e74c3c"})
         st.plotly_chart(fig, use_container_width=True)
         
-        # Hiển thị lịch sử giao dịch gần đây
         st.markdown("---")
         st.subheader("📜 Lịch sử các giao dịch đơn vị nộp tiền vào tài khoản")
         query_history = """
@@ -120,14 +119,11 @@ with tab1:
 
 # --- TAB 2: NẠP FILE EXCEL BẢNG KÊ & XÓA BẢO MẬT ---
 with tab2:
-    # --- KHU VỰC BẢO MẬT QUẢN TRỊ CAO CẤP ---
     st.subheader("🛠️ Khu vực cấu hình nội bộ")
     with st.expander("🔑 BẤM ĐỂ MỞ TÍNH NĂNG XÓA TOÀN BỘ DỮ LIỆU (CẦN MẬT KHẨU)", expanded=False):
-        st.warning("Vùng bảo mật: Chỉ Quản trị viên mới được quyền thực hiện thao tác này.")
-        
-        # Tạo 2 lớp xác thực: 1 mật khẩu, 1 mã lệnh hành động
-        input_password = st.text_input("1. Nhập mật khẩu quản trị:", type="password")
-        confirm_code = st.text_input("2. Xác nhận hành động (Gõ chính xác chữ: XUATPHATLAI):")
+        st.warning("Hành động này sẽ xóa vĩnh viễn toàn bộ danh sách đơn vị, số tiền phí phát sinh và cả lịch sử nộp tiền.")
+        input_password = st.text_input("1. Nhập mật khẩu quản trị:", type="password", key="del_pass")
+        confirm_code = st.text_input("2. Xác nhận hành động (Gõ chính xác chữ: XUATPHATLAI):", key="del_code")
         
         if st.button("🔴 KÍCH HOẠT XÓA TOÀN BỘ DỮ LIỆU HỆ THỐNG", type="primary"):
             if input_password == PASSWORD_ADMIN:
@@ -149,7 +145,6 @@ with tab2:
                 st.error("❌ SAI MẬT KHẨU QUẢN TRỊ! Bạn không có quyền xóa dữ liệu này.")
 
     st.markdown("---")
-    
     col_manual, col_excel = st.columns(2)
     
     with col_manual:
@@ -182,7 +177,6 @@ with tab2:
         if uploaded_file is not None:
             try:
                 debtor_list = parse_kho_bac_excel(uploaded_file)
-                
                 if debtor_list:
                     df_preview = pd.DataFrame(debtor_list)
                     st.write("🔍 **Kết quả bóc tách dữ liệu tự động từ file:**")
@@ -191,30 +185,30 @@ with tab2:
                     if st.button("Xác nhận nạp toàn bộ danh sách đơn vị này vào hệ thống"):
                         conn = get_connection()
                         cursor = conn.cursor()
-                        success_count = 0
-                        
                         for item in debtor_list:
                             try:
                                 cursor.execute("INSERT INTO debtors (name, total_debt) VALUES (?, ?)", 
                                                (item["Tên đơn vị"], item["Tổng phí phát sinh (VND)"]))
-                                success_count += 1
                             except sqlite3.IntegrityError:
                                 cursor.execute("UPDATE debtors SET total_debt = total_debt + ? WHERE name = ?", 
                                                (item["Tổng phí phát sinh (VND)"], item["Tên đơn vị"]))
-                                success_count += 1
-                                
                         conn.commit()
                         conn.close()
-                        st.success(f"✅ Đã nạp và cập nhật thành công phí cho các đơn vị!")
+                        st.success("✅ Đã nạp và cập nhật thành công phí cho các đơn vị!")
                         st.rerun()
                 else:
                     st.warning("Không tìm thấy dữ liệu dạng 'Tên đơn vị' và 'Tổng số tiền phải trả' trong file này.")
             except Exception as e:
                 st.error(f"Có lỗi khi xử lý dữ liệu: {e}")
 
-# --- TAB 3: CẬP NHẬT ĐƠN VỊ NỘP TIỀN ---
+# --- TAB 3: CẬP NHẬT ĐƠN VỊ NỘP TIỀN (HOÀN CHỈNH) ---
 with tab3:
     st.subheader("Ghi nhận đơn vị nộp tiền vào tài khoản")
     conn = get_connection()
     df_select = pd.read_sql_query("SELECT id, name FROM debtors", conn)
     conn.close()
+
+    if not df_select.empty:
+        debtor_options = {row["name"]: row["id"] for _, row in df_select.iterrows()}
+        with st.form("add_payment_form", clear_on_submit=True):
+            selected_debtor_name = st.selectbox("Chọn đơn vị nộp phí:", options=list(debtor_options.keys()))
