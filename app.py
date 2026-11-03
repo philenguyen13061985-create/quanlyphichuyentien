@@ -6,7 +6,7 @@ import streamlit as st
 # =================================================================
 # THIẾT LẬP MẬT KHẨU QUẢN TRỊ CAO CẤP
 # =================================================================
-PASSWORD_ADMIN = "PGD18@2026"  # Bạn có thể sửa mật khẩu ở đây
+PASSWORD_ADMIN = "PGD18@2026"
 
 # --- CẤU HÌNH DATABASE ---
 DB_NAME = "debt_tracker.db"
@@ -197,11 +197,11 @@ with tab2:
                         st.success("✅ Đã nạp và cập nhật thành công phí cho các đơn vị!")
                         st.rerun()
                 else:
-                    st.warning("Không tìm thấy dữ liệu dạng 'Tên đơn vị' và 'Tổng số tiền phải trả' trong file này.")
+                    st.warning("Không tìm thấy dữ liệu dạng 'Tên đơn vị' and 'Tổng số tiền phải trả' trong file này.")
             except Exception as e:
                 st.error(f"Có lỗi khi xử lý dữ liệu: {e}")
 
-# --- TAB 3: CẬP NHẬT ĐƠN VỊ NỘP TIỀN ---
+# --- TAB 3: CẬP NHẬT ĐƠN VỊ NỘP TIỀN (FIXED) ---
 with tab3:
     st.subheader("Ghi nhận đơn vị nộp tiền vào tài khoản")
     conn = get_connection()
