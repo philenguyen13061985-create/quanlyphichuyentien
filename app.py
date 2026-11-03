@@ -3,25 +3,26 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# =================================================================
-# THIẾT LẬP MẬT KHẨU QUẢN TRỊ CAO CẤP
-# =================================================================
-PASSWORD_ADMIN = "PGD18@2026"
-
 # --- CẤU HÌNH DATABASE ---
 DB_NAME = "debt_tracker.db"
+
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("""
+    # Bảng quản lý người nợ
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS debtors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE,
             total_debt REAL
         )
-    """)
-    cursor.execute("""
+    """
+    )
+    # Bảng quản lý lịch sử trả nợ vào tài khoản
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS payments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             debtor_id INTEGER,
@@ -30,82 +31,95 @@ def init_db():
             reference TEXT,
             FOREIGN KEY (debtor_id) REFERENCES debtors (id)
         )
-    """)
+    """
+    )
     conn.commit()
     conn.close()
 
+
 init_db()
+
 
 def get_connection():
     return sqlite3.connect(DB_NAME)
 
-# --- HÀM BÓC TÁCH TỰ ĐỘNG FILE EXCEL KHO BẠC ---
-def parse_kho_bac_excel(file):
-    df = pd.read_excel(file, header=None)
-    extracted_debtors = []
-    current_name = None
-    
-    for index, row in df.iterrows():
-        for cell_value in row:
-            if pd.isna(cell_value):
-                continue
-            cell_str = str(cell_value).strip()
-            
-            if "Tên đơn vị:" in cell_str:
-                current_name = cell_str.split("Tên đơn vị:")[-1].strip()
-            elif "Tổng số tiền phải trả:" in cell_str and current_name:
-                money_part = cell_str.split("Tổng số tiền phải trả:")[-1].strip()
-                money_clean = money_part.lower().replace('đ', '').replace('.', '').replace(',', '').strip()
-                
-                if money_clean.isdigit():
-                    extracted_debtors.append({
-                        "Tên đơn vị": current_name,
-                        "Tổng phí phát sinh (VND)": float(money_clean)
-                    })
-                    current_name = None
-    return extracted_debtors
 
-# --- CẤU HÌNH GIAO DIỆN WEB APP ---
-st.set_page_config(page_title="KBNN Khu Vực XIV - PGD số 18", layout="wide")
-st.title("🏦 App Theo Dõi Trả Phí Chuyển Tiền KBNN khu vực XIV - PGD số 18")
+# --- GIAO DIỆN APP (STREAMLIT) ---
+st.set_page_config(page_title="App Theo Dõi Trả Nợ", layout="wide")
+st.title("💰 App Theo Dõi Cập Nhật Tình Hình Trả Nợ")
 
-tab1, tab2, tab3 = st.tabs(["📊 Tổng quan & Báo cáo", "➕ Nạp bảng kê phí KBNN (Excel)", "💵 Cập nhật đơn vị nộp phí"])
+# Tab chức năng
+tab1, tab2, tab3 = st.tabs(
+    ["📊 Tổng quan & Báo cáo", "➕ Thêm người nợ mới", "💵 Cập nhật trả nợ"]
+)
 
 # --- TAB 1: TỔNG QUAN & BÁO CÁO ---
 with tab1:
-    st.subheader("Tình hình thực hiện nghĩa vụ phí của các đơn vị")
+    st.subheader("Tình hình dư nợ hiện tại")
+
     conn = get_connection()
+    # Truy vấn tính toán số tiền đã trả và còn nợ
     query = """
-        SELECT d.id, d.name AS "Tên đơn vị", d.total_debt AS "Tổng phí phát sinh (VND)",
-               COALESCE(SUM(p.amount_paid), 0) AS "Đã nộp (VND)",
-               (d.total_debt - COALESCE(SUM(p.amount_paid), 0)) AS "Còn thiếu (VND)"
-        FROM debtors d LEFT JOIN payments p ON d.id = p.debtor_id GROUP BY d.id
+        SELECT 
+            d.id,
+            d.name AS "Người nợ",
+            d.total_debt AS "Nợ ban đầu (VND)",
+            COALESCE(SUM(p.amount_paid), 0) AS "Đã trả (VND)",
+            (d.total_debt - COALESCE(SUM(p.amount_paid), 0)) AS "Còn nợ (VND)"
+        FROM debtors d
+        LEFT JOIN payments p ON d.id = p.debtor_id
+        GROUP BY d.id
     """
     df_debtors = pd.read_sql_query(query, conn)
 
     if not df_debtors.empty:
-        total_initial = df_debtors["Tổng phí phát sinh (VND)"].sum()
-        total_paid = df_debtors["Đã nộp (VND)"].sum()
-        total_remaining = df_debtors["Còn thiếu (VND)"].sum()
+        # Hiển thị các chỉ số tổng quan ở trên cùng
+        total_initial = df_debtors["Nợ ban đầu (VND)"].sum()
+        total_paid = df_debtors["Đã trả (VND)"].sum()
+        total_remaining = df_debtors["Còn nợ (VND)"].sum()
 
         col1, col2, col3 = st.columns(3)
-        col1.metric("Tổng phí phát sinh", f"{total_initial:,.0f} VND")
-        col2.metric("Tổng phí đã thu hồi", f"{total_paid:,.0f} VND", delta=f"{total_paid:,.0f}")
-        col3.metric("Tổng phí còn thiếu", f"{total_remaining:,.0f} VND", delta=f"-{total_paid:,.0f}")
+        col1.metric("Tổng nợ ban đầu", f"{total_initial:,.0f} VND")
+        col2.metric("Tổng đã thu hồi", f"{total_paid:,.0f} VND", delta=f"{total_paid:,.0f}")
+        col3.metric("Tổng nợ còn lại", f"{total_remaining:,.0f} VND", delta=f"-{total_paid:,.0f}")
 
         st.markdown("---")
-        st.dataframe(df_debtors[["Tên đơn vị", "Tổng phí phát sinh (VND)", "Đã nộp (VND)", "Còn thiếu (VND)"]], use_container_width=True)
 
-        st.subheader("📈 Biểu đồ tiến độ hoàn thành phí")
-        df_melted = pd.melt(df_debtors, id_vars=["Tên đơn vị"], value_vars=["Đã nộp (VND)", "Còn thiếu (VND)"], var_name="Trạng thái", value_name="Số tiền")
-        fig = px.bar(df_melted, x="Tên đơn vị", y="Số tiền", color="Trạng thái", barmode="stack", color_discrete_map={"Đã nộp (VND)": "#2ecc71", "Còn thiếu (VND)": "#e74c3c"})
+        # Hiển thị bảng số liệu chi tiết
+        st.dataframe(
+            df_debtors[["Người nợ", "Nợ ban đầu (VND)", "Đã trả (VND)", "Còn nợ (VND)"]],
+            use_container_width=True,
+        )
+
+        # Biểu đồ tiến độ trực quan
+        st.subheader("📈 Biểu đồ tiến độ trả nợ")
+        df_melted = pd.melt(
+            df_debtors,
+            id_vars=["Người nợ"],
+            value_vars=["Đã trả (VND)", "Còn nợ (VND)"],
+            var_name="Trạng thái",
+            value_name="Số tiền",
+        )
+        fig = px.bar(
+            df_melted,
+            x="Người nợ",
+            y="Số tiền",
+            color="Trạng thái",
+            title="Tỷ lệ Đã trả vs Còn nợ theo từng người",
+            barmode="stack",
+            color_discrete_map={
+                "Đã trả (VND)": "#2ecc71",
+                "Còn nợ (VND)": "#e74c3c",
+            },
+        )
         st.plotly_chart(fig, use_container_width=True)
-        
+
+        # Hiển thị lịch sử giao dịch gần đây
         st.markdown("---")
-        st.subheader("📜 Lịch sử các giao dịch đơn vị nộp tiền vào tài khoản")
+        st.subheader("📜 Lịch sử các giao dịch trả nợ vào tài khoản")
         query_history = """
-            SELECT p.payment_date AS "Ngày giao dịch", d.name AS "Đơn vị nộp", 
-                   p.amount_paid AS "Số tiền nộp (VND)", p.reference AS "Mã giao dịch / Ghi chú"
+            SELECT p.payment_date AS "Ngày giao dịch", d.name AS "Người trả", 
+                   p.amount_paid AS "Số tiền (VND)", p.reference AS "Ghi chú/Mã GD"
             FROM payments p
             JOIN debtors d ON p.debtor_id = d.id
             ORDER BY p.id DESC
@@ -113,104 +127,86 @@ with tab1:
         df_history = pd.read_sql_query(query_history, conn)
         if not df_history.empty:
             st.dataframe(df_history, use_container_width=True)
+        else:
+            st.info("Chưa có giao dịch trả nợ nào được ghi nhận.")
     else:
-        st.info("Hiện tại chưa có dữ liệu. Vui lòng qua tab 'Nạp bảng kê phí KBNN (Excel)'.")
+        st.info("Hiện tại chưa có dữ liệu người nợ. Vui lòng qua tab 'Thêm người nợ mới'.")
+
     conn.close()
 
-# --- TAB 2: NẠP FILE EXCEL BẢNG KÊ & CÔNG CỤ XÓA BẢO MẬT ---
+# --- TAB 2: THÊM NGƯỜI NỢ MỚI ---
 with tab2:
-    st.subheader("🛠️ Khu vực cấu hình nội bộ")
-    with st.expander("🔑 BẤM ĐỂ MỞ TÍNH NĂNG XÓA TOÀN BỘ DỮ LIỆU (CẦN MẬT KHẨU)", expanded=False):
-        st.warning("Hành động này sẽ xóa vĩnh viễn toàn bộ danh sách đơn vị, số tiền phí phát sinh và cả lịch sử nộp tiền.")
-        input_password = st.text_input("1. Nhập mật khẩu quản trị:", type="password", key="del_pass")
-        confirm_code = st.text_input("2. Xác nhận hành động (Gõ chính xác chữ: XUATPHATLAI):", key="del_code")
-        
-        if st.button("🔴 KÍCH HOẠT XÓA TOÀN BỘ DỮ LIỆU HỆ THỐNG", type="primary"):
-            if input_password == PASSWORD_ADMIN:
-                if confirm_code == "XUATPHATLAI":
-                    try:
-                        conn = get_connection()
-                        cursor = conn.cursor()
-                        cursor.execute("DELETE FROM payments")
-                        cursor.execute("DELETE FROM debtors")
-                        conn.commit()
-                        conn.close()
-                        st.success("🔥 Đã xóa sạch toàn bộ cơ sở dữ liệu thành công!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Có lỗi xảy ra: {e}")
-                else:
-                    st.error("Mã hành động chưa đúng. Vui lòng gõ chữ 'XUATPHATLAI' viết hoa không dấu.")
+    st.subheader("Tạo hồ sơ quản lý nợ mới")
+    with st.form("add_debtor_form", clear_on_submit=True):
+        new_name = st.text_input("Họ và tên người nợ:")
+        initial_debt = st.number_input(
+            "Tổng số nợ ban đầu (VND):", min_value=0.0, step=100000.0, format="%f"
+        )
+        submit_debtor = st.form_submit_button("Lưu hồ sơ")
+
+        if submit_debtor:
+            if new_name.strip() == "":
+                st.error("Vui lòng điền tên người nợ!")
             else:
-                st.error("❌ SAI MẬT KHẨU QUẢN TRỊ! Bạn không có quyền xóa dữ liệu này.")
+                try:
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT INTO debtors (name, total_debt) VALUES (?, ?)",
+                        (new_name.strip(), initial_debt),
+                    )
+                    conn.commit()
+                    st.success(f"🎉 Đã thêm thành công người nợ: {new_name}")
+                except sqlite3.IntegrityError:
+                    st.error("Tên người nợ này đã tồn tại trên hệ thống!")
+                finally:
+                    conn.close()
 
-    st.markdown("---")
-    col_manual, col_excel = st.columns(2)
-    
-    with col_manual:
-        st.subheader("Cách 1: Thêm thủ công từng đơn vị")
-        with st.form("add_debtor_form", clear_on_submit=True):
-            new_name = st.text_input("Tên đơn vị / Cơ quan:")
-            initial_debt = st.number_input("Tổng số phí phát sinh (VND):", min_value=0.0, step=1000.0, format="%f")
-            submit_debtor = st.form_submit_button("Lưu hồ sơ đơn vị")
-
-            if submit_debtor:
-                if new_name.strip() == "":
-                    st.error("Vui lòng điền tên đơn vị!")
-                else:
-                    try:
-                        conn = get_connection()
-                        cursor = conn.cursor()
-                        cursor.execute("INSERT INTO debtors (name, total_debt) VALUES (?, ?)", (new_name.strip(), initial_debt))
-                        conn.commit()
-                        st.success(f"🎉 Đã thêm thành công: {new_name}")
-                        st.rerun()
-                    except sqlite3.IntegrityError:
-                        st.error("Tên đơn vị này đã tồn tại trên hệ thống!")
-                    finally:
-                        conn.close()
-
-    with col_excel:
-        st.subheader("Cách 2: Nhập tự động từ Bảng kê Kho bạc")
-        uploaded_file = st.file_uploader("Kéo và thả file Excel bảng kê phí chuyển tiền vào đây", type=["xlsx", "xls"])
-        
-        if uploaded_file is not None:
-            try:
-                debtor_list = parse_kho_bac_excel(uploaded_file)
-                if debtor_list:
-                    df_preview = pd.DataFrame(debtor_list)
-                    st.write("🔍 **Kết quả bóc tách dữ liệu tự động từ file:**")
-                    st.dataframe(df_preview, use_container_width=True)
-                    
-                    if st.button("Xác nhận nạp toàn bộ danh sách đơn vị này vào hệ thống"):
-                        conn = get_connection()
-                        cursor = conn.cursor()
-                        for item in debtor_list:
-                            try:
-                                cursor.execute("INSERT INTO debtors (name, total_debt) VALUES (?, ?)", 
-                                               (item["Tên đơn vị"], item["Tổng phí phát sinh (VND)"]))
-                            except sqlite3.IntegrityError:
-                                cursor.execute("UPDATE debtors SET total_debt = total_debt + ? WHERE name = ?", 
-                                               (item["Tổng phí phát sinh (VND)"], item["Tên đơn vị"]))
-                        conn.commit()
-                        conn.close()
-                        st.success("✅ Đã nạp và cập nhật thành công phí cho các đơn vị!")
-                        st.rerun()
-                else:
-                    st.warning("Không tìm thấy dữ liệu dạng 'Tên đơn vị' and 'Tổng số tiền phải trả' trong file này.")
-            except Exception as e:
-                st.error(f"Có lỗi khi xử lý dữ liệu: {e}")
-
-# --- TAB 3: CẬP NHẬT ĐƠN VỊ NỘP TIỀN (FIXED) ---
+# --- TAB 3: CẬP NHẬT TRẢ NỢ ---
 with tab3:
-    st.subheader("Ghi nhận đơn vị nộp tiền vào tài khoản")
+    st.subheader("Ghi nhận tiền nợ chuyển vào tài khoản")
     conn = get_connection()
-    query_select = """
-        SELECT d.id, d.name, (d.total_debt - COALESCE(SUM(p.amount_paid), 0)) AS remaining_debt
-        FROM debtors d LEFT JOIN payments p ON d.id = p.debtor_id GROUP BY d.id
-    """
-    df_select = pd.read_sql_query(query_select, conn)
+    df_select = pd.read_sql_query("SELECT id, name FROM debtors", conn)
     conn.close()
 
     if not df_select.empty:
-        debtor_options = {row["name"]: (row["id"], row["remaining_debt"]) for _, row in df_select.iterrows()}
+        # Tạo danh bạ lựa chọn người trả nored
+        debtor_options = {row["name"]: row["id"] for _, row in df_select.iterrows()}
+
+        with st.form("add_payment_form", clear_on_submit=True):
+            selected_debtor_name = st.selectbox("Chọn người trả nợ:", options=list(debtor_options.keys()))
+            amount_to_pay = st.number_input(
+                "Số tiền chuyển khoản vào tài khoản (VND):",
+                min_value=0.0,
+                step=50000.0,
+                format="%f",
+            )
+            pay_date = st.date_input("Ngày nhận được tiền:")
+            ref_text = st.text_input(
+                "Ghi chú (Ví dụ: 'Chuyển khoản Vietcombank', 'Mã GD 12345'):"
+            )
+
+            submit_payment = st.form_submit_button("Xác nhận cập nhật tài khoản")
+
+            if submit_payment:
+                if amount_to_pay <= 0:
+                    st.error("Số tiền trả nợ phải lớn hơn 0 VND!")
+                else:
+                    debtor_id = debtor_options[selected_debtor_name]
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        """
+                        INSERT INTO payments (debtor_id, amount_paid, payment_date, reference)
+                        VALUES (?, ?, ?, ?)
+                    """,
+                        (debtor_id, amount_to_pay, str(pay_date), ref_text.strip()),
+                    )
+                    conn.commit()
+                    conn.close()
+                    st.success(
+                        f"✅ Đã cập nhật: +{amount_to_pay:,.0f} VND từ {selected_debtor_name} vào tài khoản!"
+                    )
+                    st.rerun()
+    else:
+        st.info("Bạn cần thêm ít nhất một người nợ ở Tab 2 trước khi cập nhật giao dịch.")
