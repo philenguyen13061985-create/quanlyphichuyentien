@@ -3,6 +3,11 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+# =================================================================
+# CAO CẤP: THIẾT LẬP MẬT KHẨU QUẢN TRỊ (BẠN CÓ THỂ ĐỔI MẬT KHẨU Ở ĐÂY)
+# =================================================================
+PASSWORD_ADMIN = "PGD18@2026"  # Thay đổi chuỗi này để đổi mật khẩu theo ý bạn
+
 # --- CẤU HÌNH DATABASE ---
 DB_NAME = "debt_tracker.db"
 
@@ -60,7 +65,7 @@ def parse_kho_bac_excel(file):
                     current_name = None
     return extracted_debtors
 
-# --- GIAO DIỆN APP (MỚI: CẬP NHẬT TÊN KHU VỰC XIV - PGD SỐ 18) ---
+# --- GIAO DIỆN APP (KBNN KHU VỰC XIV - PGD SỐ 18) ---
 st.set_page_config(page_title="KBNN Khu Vực XIV - PGD số 18", layout="wide")
 st.title("🏦 App Theo Dõi Trả Phí Chuyển Tiền KBNN khu vực XIV - PGD số 18")
 
@@ -113,29 +118,35 @@ with tab1:
         st.info("Hiện tại chưa có dữ liệu. Vui lòng qua tab 'Nạp bảng kê phí KBNN (Excel)'.")
     conn.close()
 
-# --- TAB 2: NẠP FILE EXCEL BẢNG KÊ & XÓA DỮ LIỆU ---
+# --- TAB 2: NẠP FILE EXCEL BẢNG KÊ & XÓA BẢO MẬT ---
 with tab2:
-    # --- KHU VỰC CÔNG CỤ QUẢN TRỊ (XÓA DỮ LIỆU) ---
-    st.subheader("🛠️ Công cụ Quản trị Dữ liệu")
-    with st.expander("⚠️ Bấm vào đây để mở chức năng XÓA dữ liệu hệ thống", expanded=False):
-        st.warning("Hành động này sẽ xóa vĩnh viễn toàn bộ danh sách đơn vị, số tiền phí phát sinh và cả lịch sử nộp tiền đang có trên hệ thống để làm sạch bộ nhớ.")
-        confirm_code = st.text_input("Gõ chữ 'XUATPHATLAI' vào ô dưới đây để xác nhận xóa:", value="")
+    # --- KHU VỰC BẢO MẬT QUẢN TRỊ CAO CẤP ---
+    st.subheader("🛠️ Khu vực cấu hình nội bộ")
+    with st.expander("🔑 BẤM ĐỂ MỞ TÍNH NĂNG XÓA TOÀN BỘ DỮ LIỆU (CẦN MẬT KHẨU)", expanded=False):
+        st.warning("Vùng bảo mật: Chỉ Quản trị viên mới được quyền thực hiện thao tác này.")
         
-        if st.button("🔴 XÁC NHẬN XÓA TOÀN BỘ DỮ LIỆU", type="primary"):
-            if confirm_code == "XUATPHATLAI":
-                try:
-                    conn = get_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("DELETE FROM payments")
-                    cursor.execute("DELETE FROM debtors")
-                    conn.commit()
-                    conn.close()
-                    st.success("🔥 Toàn bộ dữ liệu cũ đã được xóa sạch hoàn toàn! Bạn có thể tải file Excel mới lên ngay bây giờ.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Có lỗi xảy ra: {e}")
+        # Tạo 2 lớp xác thực: 1 mật khẩu, 1 mã lệnh hành động
+        input_password = st.text_input("1. Nhập mật khẩu quản trị:", type="password")
+        confirm_code = st.text_input("2. Xác nhận hành động (Gõ chính xác chữ: XUATPHATLAI):")
+        
+        if st.button("🔴 KÍCH HOẠT XÓA TOÀN BỘ DỮ LIỆU HỆ THỐNG", type="primary"):
+            if input_password == PASSWORD_ADMIN:
+                if confirm_code == "XUATPHATLAI":
+                    try:
+                        conn = get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM payments")
+                        cursor.execute("DELETE FROM debtors")
+                        conn.commit()
+                        conn.close()
+                        st.success("🔥 Đã xóa sạch toàn bộ cơ sở dữ liệu thành công!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Có lỗi xảy ra: {e}")
+                else:
+                    st.error("Mã hành động chưa đúng. Vui lòng gõ chữ 'XUATPHATLAI' viết hoa không dấu.")
             else:
-                st.error("Mã xác nhận chưa chính xác. Vui lòng gõ đúng chữ 'XUATPHATLAI' viết hoa không dấu.")
+                st.error("❌ SAI MẬT KHẨU QUẢN TRỊ! Bạn không có quyền xóa dữ liệu này.")
 
     st.markdown("---")
     
@@ -207,10 +218,3 @@ with tab3:
     conn = get_connection()
     df_select = pd.read_sql_query("SELECT id, name FROM debtors", conn)
     conn.close()
-
-    if not df_select.empty:
-        debtor_options = {row["name"]: row["id"] for _, row in df_select.iterrows()}
-        with st.form("add_payment_form", clear_on_submit=True):
-            selected_debtor_name = st.selectbox("Chọn đơn vị nộp phí:", options=list(debtor_options.keys()))
-            amount_to_pay = st.number_input("Số tiền đơn vị đã chuyển khoản nộp (VND):", min_value=0.0, step=1000.0, format="%f")
-            pay_date = st.date_input("Ngày nhận được tiền chuyển khoản:")
